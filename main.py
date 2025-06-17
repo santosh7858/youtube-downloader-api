@@ -4,9 +4,9 @@ from pytube import YouTube
 import re
 import os
 import logging
+
 from http.cookiejar import MozillaCookieJar
 import requests
-from pytube import request as pytube_request
 
 app = Flask(__name__)
 CORS(app)
@@ -17,16 +17,14 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 COOKIE_FILE = "youtube_cookies.txt"
 
-def load_cookies_into_pytube():
+def load_cookie_dict():
     try:
         cookie_jar = MozillaCookieJar()
         cookie_jar.load(COOKIE_FILE, ignore_discard=True, ignore_expires=True)
-        cookies_dict = requests.utils.dict_from_cookiejar(cookie_jar)
-        cookie_string = "; ".join([f"{k}={v}" for k, v in cookies_dict.items()])
-        pytube_request.default_headers["Cookie"] = cookie_string
-        logging.info("✅ Cookies successfully loaded into pytube headers")
+        return {cookie.name: cookie.value for cookie in cookie_jar}
     except Exception as e:
-        logging.error(f"Failed to load cookies: {e}")
+        logging.error("Failed to load cookies: %s", str(e))
+        return None
 
 def is_valid_youtube_url(url):
     pattern = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$"
@@ -34,8 +32,10 @@ def is_valid_youtube_url(url):
 
 def get_video_info(url):
     try:
-        load_cookies_into_pytube()
+        cookies = load_cookie_dict()
         yt = YouTube(url)
+        if cookies:
+            yt._cookies = cookies  # Monkey patch cookies
         resolutions = sorted(list(set(
             stream.resolution for stream in yt.streams.filter(progressive=True, file_extension='mp4') if stream.resolution
         )))
@@ -54,8 +54,10 @@ def get_video_info(url):
 
 def download_video(url, resolution):
     try:
-        load_cookies_into_pytube()
+        cookies = load_cookie_dict()
         yt = YouTube(url)
+        if cookies:
+            yt._cookies = cookies  # Monkey patch cookies
         stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
         if stream:
             return {"download_url": stream.url}, None
