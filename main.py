@@ -1,19 +1,15 @@
 from flask import Flask, request, jsonify
 from pytube import YouTube
 import re
-import os
 
 app = Flask(__name__)
-
-DOWNLOAD_DIR = "downloads"
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def download_video(url, resolution):
     try:
         yt = YouTube(url)
         stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
         if stream:
-            stream.download(output_path=DOWNLOAD_DIR)
+            stream.download()
             return True, None
         else:
             return False, "Video with the specified resolution not found."
@@ -29,14 +25,14 @@ def get_video_info(url):
             "length": yt.length,
             "views": yt.views,
             "description": yt.description,
-            "publish_date": str(yt.publish_date),
+            "publish_date": yt.publish_date,
         }
         return video_info, None
     except Exception as e:
         return None, str(e)
 
 def is_valid_youtube_url(url):
-    pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+'
+    pattern = r"^(https?://)?(www\.)?youtube\.com/watch\?v=[\w-]+(&\S*)?$"
     return re.match(pattern, url) is not None
 
 @app.route('/download/<resolution>', methods=['POST'])
@@ -53,7 +49,7 @@ def download_by_resolution(resolution):
     success, error_message = download_video(url, resolution)
     
     if success:
-        return jsonify({"message": f"Video downloaded successfully in {resolution} resolution."}), 200
+        return jsonify({"message": f"Video with resolution {resolution} downloaded successfully."}), 200
     else:
         return jsonify({"error": error_message}), 500
 
@@ -76,8 +72,8 @@ def video_info():
         return jsonify({"error": error_message}), 500
 
 @app.route('/')
-def index():
-    return "YouTube Video Info & Downloader API is Running"
+def home():
+    return "YouTube Downloader API is running."
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000)
