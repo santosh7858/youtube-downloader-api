@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-COOKIE_FILE = "https://raw.githubusercontent.com/santosh7858/youtube-downloader-api/refs/heads/main/main.py"  # Path to your cookie file
+COOKIE_FILE = ""  # Path to your cookie file
 
 def load_cookies_from_file():
     try:
