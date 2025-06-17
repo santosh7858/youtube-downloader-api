@@ -5,12 +5,28 @@ import re
 import os
 import logging
 
+from http.cookiejar import MozillaCookieJar
+import requests
+
 app = Flask(__name__)
-CORS(app)  # Frontend access allow
+CORS(app)
 logging.basicConfig(level=logging.INFO)
 
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+COOKIE_FILE = "youtube_cookies.json"  # Path to your cookie file
+
+def load_cookies_from_file():
+    try:
+        cookie_jar = MozillaCookieJar()
+        cookie_jar.load(COOKIE_FILE, ignore_discard=True, ignore_expires=True)
+        session = requests.Session()
+        session.cookies.update(cookie_jar)
+        return session
+    except Exception as e:
+        logging.error("Failed to load cookies: %s", str(e))
+        return None
 
 def is_valid_youtube_url(url):
     pattern = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$"
@@ -18,7 +34,8 @@ def is_valid_youtube_url(url):
 
 def get_video_info(url):
     try:
-        yt = YouTube(url)
+        session = load_cookies_from_file()
+        yt = YouTube(url, use_oauth=False, allow_oauth_cache=True, proxies=None, request=session)
         resolutions = sorted(list(set(
             stream.resolution for stream in yt.streams.filter(progressive=True, file_extension='mp4') if stream.resolution
         )))
@@ -37,10 +54,10 @@ def get_video_info(url):
 
 def download_video(url, resolution):
     try:
-        yt = YouTube(url)
+        session = load_cookies_from_file()
+        yt = YouTube(url, use_oauth=False, allow_oauth_cache=True, proxies=None, request=session)
         stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
         if stream:
-            # Just return stream URL instead of downloading actual file (better for web)
             return {"download_url": stream.url}, None
         else:
             return None, "Video with the specified resolution not found."
