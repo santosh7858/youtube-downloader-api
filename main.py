@@ -14,7 +14,7 @@ def download_video():
         'quiet': True,
         'skip_download': True,
         'format': 'best',
-        'cookiefile': 'youtube_cookies.txt'  # optional if you added cookies
+        'cookiefile': 'youtube_cookies.json'  # optional if you added cookies
     }
 
     try:
