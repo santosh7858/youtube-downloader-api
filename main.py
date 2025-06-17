@@ -4,9 +4,9 @@ from pytube import YouTube
 import re
 import os
 import logging
-
 from http.cookiejar import MozillaCookieJar
 import requests
+from pytube import request as pytube_request
 
 app = Flask(__name__)
 CORS(app)
@@ -15,18 +15,18 @@ logging.basicConfig(level=logging.INFO)
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-COOKIE_FILE = "youtube_cookies.txt"  # Path to your cookie file
+COOKIE_FILE = "youtube_cookies.txt"
 
-def load_cookies_from_file():
+def load_cookies_into_pytube():
     try:
         cookie_jar = MozillaCookieJar()
         cookie_jar.load(COOKIE_FILE, ignore_discard=True, ignore_expires=True)
-        session = requests.Session()
-        session.cookies.update(cookie_jar)
-        return session
+        cookies_dict = requests.utils.dict_from_cookiejar(cookie_jar)
+        cookie_string = "; ".join([f"{k}={v}" for k, v in cookies_dict.items()])
+        pytube_request.default_headers["Cookie"] = cookie_string
+        logging.info("✅ Cookies successfully loaded into pytube headers")
     except Exception as e:
-        logging.error("Failed to load cookies: %s", str(e))
-        return None
+        logging.error(f"Failed to load cookies: {e}")
 
 def is_valid_youtube_url(url):
     pattern = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$"
@@ -34,8 +34,8 @@ def is_valid_youtube_url(url):
 
 def get_video_info(url):
     try:
-        session = load_cookies_from_file()
-        yt = YouTube(url, use_oauth=False, allow_oauth_cache=True, proxies=None, request=session)
+        load_cookies_into_pytube()
+        yt = YouTube(url)
         resolutions = sorted(list(set(
             stream.resolution for stream in yt.streams.filter(progressive=True, file_extension='mp4') if stream.resolution
         )))
@@ -54,8 +54,8 @@ def get_video_info(url):
 
 def download_video(url, resolution):
     try:
-        session = load_cookies_from_file()
-        yt = YouTube(url, use_oauth=False, allow_oauth_cache=True, proxies=None, request=session)
+        load_cookies_into_pytube()
+        yt = YouTube(url)
         stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
         if stream:
             return {"download_url": stream.url}, None
