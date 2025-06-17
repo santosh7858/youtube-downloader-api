@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: youtube-downloader-api
+    name: youtube-downloader
     env: python
-    buildCommand: ""
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "python app.py"
     envVars:
       - key: FLASK_ENV
