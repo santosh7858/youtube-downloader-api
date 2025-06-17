@@ -1,41 +1,52 @@
- from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from pytube import YouTube
 import re
 import os
+import logging
 
 app = Flask(__name__)
+CORS(app)  # Frontend access allow
+logging.basicConfig(level=logging.INFO)
 
-def download_video(url, resolution):
-    try:
-        yt = YouTube(url)
-        stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
-        if stream:
-            stream.download(output_path="downloads")
-            return True, None
-        else:
-            return False, "Video with the specified resolution not found."
-    except Exception as e:
-        return False, str(e)
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+def is_valid_youtube_url(url):
+    pattern = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$"
+    return re.match(pattern, url)
 
 def get_video_info(url):
     try:
         yt = YouTube(url)
-        video_info = {
+        resolutions = sorted(list(set(
+            stream.resolution for stream in yt.streams.filter(progressive=True, file_extension='mp4') if stream.resolution
+        )))
+        return {
             "title": yt.title,
             "author": yt.author,
             "length": yt.length,
             "views": yt.views,
             "description": yt.description,
             "publish_date": str(yt.publish_date),
-            "available_resolutions": [stream.resolution for stream in yt.streams.filter(progressive=True, file_extension='mp4')]
-        }
-        return video_info, None
+            "available_resolutions": resolutions
+        }, None
     except Exception as e:
+        logging.error("Video info error: %s", str(e))
         return None, str(e)
 
-def is_valid_youtube_url(url):
-    pattern = r"^(https?://)?(www\.)?youtube\.com/watch\?v=[\w-]+(&\S*)?$"
-    return re.match(pattern, url) is not None
+def download_video(url, resolution):
+    try:
+        yt = YouTube(url)
+        stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=resolution).first()
+        if stream:
+            # Just return stream URL instead of downloading actual file (better for web)
+            return {"download_url": stream.url}, None
+        else:
+            return None, "Video with the specified resolution not found."
+    except Exception as e:
+        logging.error("Download error: %s", str(e))
+        return None, str(e)
 
 @app.route('/')
 def index():
@@ -43,39 +54,39 @@ def index():
 
 @app.route('/video_info', methods=['POST'])
 def video_info():
-    data = request.get_json()
-    url = data.get('url')
-    
+    try:
+        data = request.get_json(force=True)
+        url = data.get('url')
+    except:
+        return jsonify({"error": "Invalid JSON"}), 400
+
     if not url:
         return jsonify({"error": "Missing 'url' parameter in request body."}), 400
-
     if not is_valid_youtube_url(url):
         return jsonify({"error": "Invalid YouTube URL."}), 400
 
-    video_info, error_message = get_video_info(url)
-    
-    if video_info:
-        return jsonify(video_info), 200
-    else:
-        return jsonify({"error": error_message}), 500
+    info, error = get_video_info(url)
+    if error:
+        return jsonify({"error": error}), 500
+    return jsonify(info), 200
 
 @app.route('/download/<resolution>', methods=['POST'])
 def download_by_resolution(resolution):
-    data = request.get_json()
-    url = data.get('url')
+    try:
+        data = request.get_json(force=True)
+        url = data.get('url')
+    except:
+        return jsonify({"error": "Invalid JSON"}), 400
 
     if not url:
         return jsonify({"error": "Missing 'url' parameter in request body."}), 400
-
     if not is_valid_youtube_url(url):
         return jsonify({"error": "Invalid YouTube URL."}), 400
 
-    success, error_message = download_video(url, resolution)
-    
-    if success:
-        return jsonify({"message": f"✅ Video downloaded successfully in {resolution}."}), 200
-    else:
-        return jsonify({"error": error_message}), 500
+    result, error = download_video(url, resolution)
+    if error:
+        return jsonify({"error": error}), 500
+    return jsonify(result), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
