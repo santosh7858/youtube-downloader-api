@@ -14,7 +14,6 @@ def get_links():
     if not url:
         return jsonify({'error': 'Missing URL'}), 400
 
-    # Path to the cookie file (must be in the same directory)
     cookie_path = os.path.join(os.path.dirname(__file__), 'youtube_cookies.txt')
 
     ydl_opts = {
@@ -31,42 +30,47 @@ def get_links():
             formats = []
 
             for f in info.get('formats', []):
-                if not f.get('url'):
+                # Must have audio and URL
+                if not f.get('url') or f.get('acodec') == 'none':
                     continue
 
-                # MP3 format (extracted from best audio)
-                if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
-                    formats.append({
-                        'format_id': f.get('format_id'),
-                        'ext': 'mp3',
-                        'resolution': 'audio only',
-                        'filesize': f.get('filesize'),
-                        'url': f['url']
-                    })
-                    continue
-
-                # Only formats with audio (acodec must NOT be 'none')
-                if f.get('acodec') == 'none':
-                    continue
-
-                # Allow video formats with valid resolutions or format notes
-                resolution = f.get('format_note') or f.get('height') or f.get('resolution')
+                ext = f.get('ext')
+                resolution = f.get('format_note') or f.get('resolution') or f.get('height')
                 if isinstance(resolution, int):
                     resolution = f"{resolution}p"
 
-                # Append video formats including mp4, webm, 3gp, etc.
                 formats.append({
                     'format_id': f.get('format_id'),
-                    'ext': f.get('ext'),
+                    'ext': ext,
                     'resolution': resolution,
                     'filesize': f.get('filesize'),
-                    'url': f.get('url')
+                    'url': f.get('url'),
+                    'audio_codec': f.get('acodec'),
+                    'video_codec': f.get('vcodec'),
                 })
+
+            # Filter for only expected formats
+            desired_formats = []
+            resolutions_to_include = ['144p', '240p', '360p', '480p', '720p', '1080p', '1440p', '2160p']
+            video_exts = ['mp4', '3gp']
+            audio_exts = ['mp3', 'm4a', 'webm', 'opus']
+
+            for fmt in formats:
+                ext = fmt['ext']
+                res = str(fmt.get('resolution'))
+
+                # MP3/audio-only
+                if ext in audio_exts and fmt.get('video_codec') == 'none':
+                    desired_formats.append({**fmt, 'type': 'audio'})
+
+                # MP4/3GP video+audio with specified resolutions
+                elif ext in video_exts and res in resolutions_to_include:
+                    desired_formats.append({**fmt, 'type': 'video'})
 
             return jsonify({
                 'title': info.get('title'),
                 'url': info.get('webpage_url'),
-                'formats': formats
+                'formats': desired_formats
             })
 
     except Exception as e:
