@@ -14,7 +14,7 @@ def get_links():
     if not url:
         return jsonify({'error': 'Missing URL'}), 400
 
-    # Absolute path to the cookie file (Render uses /render/)
+    # Use absolute path to cookie file
     cookie_path = os.path.join(os.path.dirname(__file__), 'youtube_cookies.txt')
 
     ydl_opts = {
@@ -29,20 +29,30 @@ def get_links():
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            formats = []
+            for f in info.get('formats', []):
+                # Skip formats without direct URL
+                if not f.get('url'):
+                    continue
+
+                resolution = f.get('format_note') or f.get('resolution') or f.get('height')
+                if isinstance(resolution, int):
+                    resolution = f"{resolution}p"
+
+                formats.append({
+                    'format_id': f.get('format_id'),
+                    'ext': f.get('ext'),
+                    'resolution': resolution,
+                    'filesize': f.get('filesize'),
+                    'url': f.get('url')
+                })
+
             return jsonify({
                 'title': info.get('title'),
                 'url': info.get('webpage_url'),
-                'formats': [
-                    {
-                        'format_id': f['format_id'],
-                        'ext': f['ext'],
-                        'resolution': f.get('resolution') or f.get('height'),
-                        'filesize': f.get('filesize'),
-                        'url': f['url']
-                    }
-                    for f in info.get('formats', []) if f.get('url')
-                ]
+                'formats': formats
             })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
