@@ -14,13 +14,11 @@ def get_links():
     if not url:
         return jsonify({'error': 'Missing URL'}), 400
 
-    # Use absolute path to cookie file
     cookie_path = os.path.join(os.path.dirname(__file__), 'youtube_cookies.txt')
 
     ydl_opts = {
         'quiet': True,
         'cookiefile': cookie_path,
-        'format': 'bestvideo+bestaudio/best',
         'skip_download': True,
         'forcejson': True,
         'noplaylist': True,
@@ -31,8 +29,10 @@ def get_links():
             info = ydl.extract_info(url, download=False)
             formats = []
             for f in info.get('formats', []):
-                # Skip formats without direct URL
                 if not f.get('url'):
+                    continue
+                # ✅ Only include formats with audio
+                if f.get('acodec') == 'none':
                     continue
 
                 resolution = f.get('format_note') or f.get('resolution') or f.get('height')
