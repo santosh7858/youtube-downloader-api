@@ -5,48 +5,46 @@ import os
 app = Flask(__name__)
 
 @app.route('/')
-def home():
-    return '✅ YouTube Downloader API is Live!'
+def index():
+    return "✅ YouTube Downloader API is Live!"
 
-@app.route('/get_links', methods=['GET'])
+@app.route('/get_links')
 def get_links():
     url = request.args.get('url')
     if not url:
-        return jsonify({"error": "Missing URL"}), 400
+        return jsonify({'error': 'Missing URL'}), 400
+
+    # Absolute path to the cookie file (Render uses /render/)
+    cookie_path = os.path.join(os.path.dirname(__file__), 'youtube_cookies.txt')
+
+    ydl_opts = {
+        'quiet': True,
+        'cookiefile': cookie_path,
+        'format': 'bestvideo+bestaudio/best',
+        'skip_download': True,
+        'forcejson': True,
+        'noplaylist': True,
+    }
 
     try:
-        # yt-dlp options
-        ydl_opts = {
-            'quiet': True,
-            'skip_download': True,
-            'cookies': 'youtube_cookies.txt',  # local cookie file
-            'forcejson': True,
-            'extract_flat': False,
-            'noplaylist': True,
-        }
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-
-            formats = []
-            for fmt in info.get('formats', []):
-                formats.append({
-                    'format_id': fmt.get('format_id'),
-                    'ext': fmt.get('ext'),
-                    'resolution': fmt.get('resolution') or f"{fmt.get('height')}p",
-                    'filesize': fmt.get('filesize'),
-                    'url': fmt.get('url')
-                })
-
             return jsonify({
-                "title": info.get('title'),
-                "thumbnail": info.get('thumbnail'),
-                "formats": formats
+                'title': info.get('title'),
+                'url': info.get('webpage_url'),
+                'formats': [
+                    {
+                        'format_id': f['format_id'],
+                        'ext': f['ext'],
+                        'resolution': f.get('resolution') or f.get('height'),
+                        'filesize': f.get('filesize'),
+                        'url': f['url']
+                    }
+                    for f in info.get('formats', []) if f.get('url')
+                ]
             })
-
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # for Render
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
