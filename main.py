@@ -1,57 +1,60 @@
 from flask import Flask, request, jsonify
-from pytube import YouTube
+import yt_dlp
 import os
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return '✅ YouTube Downloader API is Running'
+    return '✅ YouTube Downloader API is Live!'
 
 @app.route('/get_links', methods=['GET'])
 def get_links():
-    url = request.args.get('url')
-    if not url:
-        return jsonify({"error": "Missing 'url' parameter"}), 400
+    video_url = request.args.get('url')
+    if not video_url:
+        return jsonify({'error': 'No URL provided'}), 400
 
     try:
-        yt = YouTube(url)
-        title = yt.title
-        thumbnail = yt.thumbnail_url
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'format': 'bestvideo+bestaudio/best',
+            'extract_flat': False,
+        }
 
-        video_streams = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc()
-        audio_streams = yt.streams.filter(only_audio=True).order_by('abr').desc()
+        links = {'mp4': [], 'mp3': []}
 
-        videos = []
-        for stream in video_streams:
-            videos.append({
-                "resolution": stream.resolution,
-                "mime_type": stream.mime_type,
-                "filesize_MB": round(stream.filesize / 1024 / 1024, 2),
-                "url": stream.url
-            })
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
 
-        audios = []
-        for stream in audio_streams:
-            abr = stream.abr if stream.abr else "unknown"
-            audios.append({
-                "bitrate": abr,
-                "mime_type": stream.mime_type,
-                "filesize_MB": round(stream.filesize / 1024 / 1024, 2),
-                "url": stream.url
-            })
+            # MP4 download links
+            for f in info.get("formats", []):
+                if f.get("ext") == "mp4" and f.get("url"):
+                    res = f.get("format_note") or f.get("height", "unknown")
+                    links['mp4'].append({
+                        'resolution': res,
+                        'filesize': f.get("filesize"),
+                        'url': f["url"]
+                    })
+
+                # MP3 or audio formats
+                if f.get("ext") in ["m4a", "mp3", "webm"] and f.get("acodec") != "none":
+                    links['mp3'].append({
+                        'abr': f.get("abr", "unknown"),
+                        'filesize': f.get("filesize"),
+                        'url': f["url"]
+                    })
 
         return jsonify({
-            "title": title,
-            "thumbnail": thumbnail,
-            "videos": videos,
-            "audios": audios
+            'title': info.get('title'),
+            'thumbnail': info.get('thumbnail'),
+            'duration': info.get('duration'),
+            'links': links
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-# ✅ Port binding from environment (Render compatible)
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))  # fallback to 10000 if PORT not set
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
