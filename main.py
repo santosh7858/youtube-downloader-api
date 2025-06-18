@@ -14,6 +14,7 @@ def get_links():
     if not url:
         return jsonify({'error': 'Missing URL'}), 400
 
+    # Path to the cookie file (must be in the same directory)
     cookie_path = os.path.join(os.path.dirname(__file__), 'youtube_cookies.txt')
 
     ydl_opts = {
@@ -28,17 +29,32 @@ def get_links():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = []
+
             for f in info.get('formats', []):
                 if not f.get('url'):
                     continue
-                # ✅ Only include formats with audio
+
+                # MP3 format (extracted from best audio)
+                if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
+                    formats.append({
+                        'format_id': f.get('format_id'),
+                        'ext': 'mp3',
+                        'resolution': 'audio only',
+                        'filesize': f.get('filesize'),
+                        'url': f['url']
+                    })
+                    continue
+
+                # Only formats with audio (acodec must NOT be 'none')
                 if f.get('acodec') == 'none':
                     continue
 
-                resolution = f.get('format_note') or f.get('resolution') or f.get('height')
+                # Allow video formats with valid resolutions or format notes
+                resolution = f.get('format_note') or f.get('height') or f.get('resolution')
                 if isinstance(resolution, int):
                     resolution = f"{resolution}p"
 
+                # Append video formats including mp4, webm, 3gp, etc.
                 formats.append({
                     'format_id': f.get('format_id'),
                     'ext': f.get('ext'),
