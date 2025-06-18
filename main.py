@@ -1,60 +1,52 @@
 from flask import Flask, request, jsonify
 import yt_dlp
-import os
 
 app = Flask(__name__)
 
 @app.route('/')
-def home():
+def index():
     return '✅ YouTube Downloader API is Live!'
 
 @app.route('/get_links', methods=['GET'])
 def get_links():
-    video_url = request.args.get('url')
-    if not video_url:
-        return jsonify({'error': 'No URL provided'}), 400
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'URL parameter is missing'}), 400
 
     try:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'cookiefile': 'youtube_cookies.txt',
             'format': 'bestvideo+bestaudio/best',
-            'extract_flat': False,
+            'forcejson': True,
         }
 
-        links = {'mp4': [], 'mp3': []}
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            info_dict = ydl.extract_info(url, download=False)
+            formats = info_dict.get('formats', [])
+            result = []
 
-            # MP4 download links
-            for f in info.get("formats", []):
-                if f.get("ext") == "mp4" and f.get("url"):
-                    res = f.get("format_note") or f.get("height", "unknown")
-                    links['mp4'].append({
-                        'resolution': res,
-                        'filesize': f.get("filesize"),
-                        'url': f["url"]
+            for fmt in formats:
+                if fmt.get('url') and fmt.get('ext') in ['mp4', 'webm', 'm4a', 'mp3']:
+                    result.append({
+                        'format_id': fmt.get('format_id'),
+                        'extension': fmt.get('ext'),
+                        'resolution': fmt.get('resolution') or f"{fmt.get('height')}p",
+                        'url': fmt.get('url'),
+                        'filesize': fmt.get('filesize') or 'N/A'
                     })
 
-                # MP3 or audio formats
-                if f.get("ext") in ["m4a", "mp3", "webm"] and f.get("acodec") != "none":
-                    links['mp3'].append({
-                        'abr': f.get("abr", "unknown"),
-                        'filesize': f.get("filesize"),
-                        'url': f["url"]
-                    })
-
-        return jsonify({
-            'title': info.get('title'),
-            'thumbnail': info.get('thumbnail'),
-            'duration': info.get('duration'),
-            'links': links
-        })
+            return jsonify({
+                'title': info_dict.get('title'),
+                'thumbnail': info_dict.get('thumbnail'),
+                'formats': result
+            })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
+    import os
+    port = int(os.environ.get('PORT', 10000))  # For Render deployment
     app.run(host='0.0.0.0', port=port)
