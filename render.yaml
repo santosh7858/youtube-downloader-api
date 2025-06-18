@@ -4,7 +4,9 @@ services:
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    startCommand: "gunicorn main:app"
     envVars:
+      - key: PORT
+        value: 10000
       - key: FLASK_ENV
         value: production
