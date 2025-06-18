@@ -24,60 +24,65 @@ def get_links():
         'noplaylist': True,
     }
 
-    desired_resolutions = {
-        'mp3': 'MP3',
-        '144p': ['144p', 'tiny'],       # covers 3GP too
-        '240p': ['240p'],
-        '360p': ['360p'],
-        '480p': ['480p'],
-        '720p': ['720p', 'hd720'],
-        '1080p': ['1080p', 'hd1080'],
-        '1440p': ['1440p', 'hd1440'],
-        '2160p': ['2160p', 'hd2160'],
+    # Desired resolutions
+    resolutions_order = [
+        "144p", "240p", "360p", "480p", "720p", "1080p", "1440p", "2160p"
+    ]
+    desired_formats = {
+        "mp3": None,
+        "144p": None,
+        "240p": None,
+        "360p": None,
+        "480p": None,
+        "720p": None,
+        "1080p": None,
+        "1440p": None,
+        "2160p": None,
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            formats = []
+            formats = info.get('formats', [])
 
-            for f in info.get('formats', []):
-                if not f.get('url') or f.get('acodec') == 'none':
+            for f in formats:
+                if not f.get('url'):
                     continue
 
-                height = f.get('height')
-                format_note = f.get('format_note', '').lower()
-                ext = f.get('ext')
-                abr = f.get('abr')
-
-                # Match MP3 or audio-only
-                if ext == 'm4a' and abr:
-                    formats.append({
-                        'format': 'MP3',
-                        'ext': 'mp3',
-                        'bitrate': f'{abr} kbps',
-                        'filesize_MB': round((f.get('filesize', 0) or 0) / 1_048_576, 2),
-                        'url': f['url']
-                    })
+                # ✅ MP3: audio-only (e.g. m4a, webm with no video)
+                if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('ext') in ['m4a', 'webm']:
+                    if not desired_formats["mp3"]:
+                        desired_formats["mp3"] = {
+                            "format": "MP3",
+                            "ext": "mp3",
+                            "bitrate": f.get('abr', 'N/A'),
+                            "filesize_MB": round((f.get('filesize', 0) or 0) / 1_048_576, 2),
+                            "url": f['url']
+                        }
                     continue
 
-                # Match video + audio for specific resolutions
-                for res_key, values in desired_resolutions.items():
-                    if res_key == 'mp3':
+                # ✅ MP4 video+audio
+                if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                    height = f.get('height')
+                    if not height:
                         continue
-                    if (str(height) + 'p' in values or format_note in values):
-                        formats.append({
-                            'format': res_key,
-                            'ext': ext,
-                            'filesize_MB': round((f.get('filesize', 0) or 0) / 1_048_576, 2),
-                            'url': f['url']
-                        })
-                        break
+
+                    label = f"{height}p"
+                    if label in desired_formats and not desired_formats[label]:
+                        desired_formats[label] = {
+                            "format": label,
+                            "ext": f.get('ext'),
+                            "filesize_MB": round((f.get('filesize', 0) or 0) / 1_048_576, 2),
+                            "url": f['url']
+                        }
+
+            # Final output list with only matched formats
+            output_formats = [v for k, v in desired_formats.items() if v]
 
             return jsonify({
-                'title': info.get('title'),
-                'url': info.get('webpage_url'),
-                'formats': formats
+                "title": info.get("title"),
+                "url": info.get("webpage_url"),
+                "formats": output_formats
             })
 
     except Exception as e:
