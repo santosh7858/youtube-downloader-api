@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from pytube import YouTube
-import math
+import os
 
 app = Flask(__name__)
 
@@ -51,5 +51,7 @@ def get_links():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ✅ Port binding from environment (Render compatible)
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))  # fallback to 10000 if PORT not set
+    app.run(host='0.0.0.0', port=port)
