@@ -22,51 +22,49 @@ def get_links():
         'skip_download': True,
         'noplaylist': True,
         'forcejson': True,
-        'extract_flat': False,
-    }
-
-    format_map = {
-        'mp3': 'MP3',
-        '144p': ['144p', 'tiny'],
-        '240p': ['240p'],
-        '360p': ['360p'],
-        '480p': ['480p'],
-        '720p': ['720p', 'hd720'],
-        '1080p': ['1080p', 'hd1080'],
-        '1440p': ['1440p', 'hd1440'],
-        '2160p': ['2160p', 'hd2160'],
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            results = {
+
+            formats_list = []
+            for f in info.get('formats', []):
+                if not f.get('url'):
+                    continue
+                if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
+                    # MP3 / audio only
+                    tag = "MP3"
+                elif f.get('acodec') == 'none':
+                    continue  # skip video-only
+                else:
+                    height = f.get('height')
+                    if height:
+                        tag = f"{height}p"
+                    else:
+                        tag = f.get('format_note') or "Unknown"
+
+                filesize = f.get('filesize') or 0
+                size_mb = round(filesize / 1048576, 2) if filesize else None
+
+                formats_list.append({
+                    'format_id': f.get('format_id'),
+                    'ext': f.get('ext'),
+                    'tag': tag,
+                    'resolution': f.get('format_note') or f"{f.get('height')}p",
+                    'filesize_mb': size_mb,
+                    'url': f.get('url'),
+                })
+
+            return jsonify({
                 'title': info.get('title'),
                 'url': info.get('webpage_url'),
-                'formats': {}
-            }
-
-            for tag, res_list in format_map.items():
-                if isinstance(res_list, str):
-                    res_list = [res_list]
-
-                for fmt in info.get('formats', []):
-                    if fmt.get('acodec') == 'none':
-                        continue  # ignore formats without audio
-                    if fmt.get('format_note') in res_list or str(fmt.get('height')) + 'p' in res_list:
-                        filesize_mb = round((fmt.get('filesize', 0) or 0) / 1048576, 2)
-                        results['formats'][tag] = {
-                            'ext': fmt.get('ext'),
-                            'resolution': fmt.get('format_note') or f"{fmt.get('height')}p",
-                            'filesize_mb': filesize_mb,
-                            'url': fmt.get('url')
-                        }
-                        break
-
-            return jsonify(results)
+                'formats': formats_list
+            })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
